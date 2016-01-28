@@ -37,7 +37,6 @@
     [super setRepresentedObject:representedObject];
 
     // Update the view, if already loaded.
-//    _peripheralManager = [[CBPeripheralManager alloc] initWithDelegate:self queue:nil];
 }
 
 
