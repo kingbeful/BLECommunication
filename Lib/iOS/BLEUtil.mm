@@ -12,27 +12,11 @@
 static BLEUtil *INSTANCE = 0;
 static int CENTRAL = 0;
 static int PERIPHERAL = 1;
-//static NSString *const EV_BT_POWER_ON = @"poweron";
-//static NSString *const EV_DISCONNECT_PERIPHERAL = @"disconnect";
-//static NSString *const EV_CONNECT_PERIPHERAL = @"connect";
-//static NSString *const EV_UPDATE_CHAR_VALUE = @"update";
-
-//enum ErrorCode {
-//    E_NO_BLE_FEATURE,
-//    E_BT_POWER_OFF,
-//    E_RSSI_ERROR,
-//    E_RSSI_TOO_LOW,
-//    E_CONNECT_PERIPHERAL_FAILED,
-//    E_DISCOVER_SERVICE,
-//    E_DISCOVER_CHAR_FOR_SERVICE,
-//    E_UPDATE_VALUE_FOR_CHAR,
-//};
 
 @interface BLEUtil () <CBCentralManagerDelegate, CBPeripheralDelegate>
 
 @property (strong, nonatomic) CBCentralManager      *centralManager;
 @property (strong, nonatomic) CBPeripheral          *discoveredPeripheral;
-@property (strong, nonatomic) NSMutableData         *data;
 @property (strong, nonatomic) CBUUID                *serviceUUID;
 
 @end
@@ -80,13 +64,8 @@ static int PERIPHERAL = 1;
 // to the peripheral automatically. Additionally, after connect with peripheral, central
 // will discover the services automatically
 - (void) scanPeripheralWithServicesUUID:(NSString*) uuid {
-//    if (uuid) {
-        self.serviceUUID = [CBUUID UUIDWithString:uuid];
-        [self.centralManager scanForPeripheralsWithServices:@[self.serviceUUID] options:@{ CBCentralManagerScanOptionAllowDuplicatesKey : @YES }];
-//    } else {
-//        self.serviceUUID = nil;
-//        [self.centralManager scanForPeripheralsWithServices:nil options:nil];
-//    }
+    self.serviceUUID = [CBUUID UUIDWithString:uuid];
+    [self.centralManager scanForPeripheralsWithServices:@[self.serviceUUID] options:@{ CBCentralManagerScanOptionAllowDuplicatesKey : @YES }];
 }
 
 #pragma mark - Central Methods
@@ -133,10 +112,10 @@ static int PERIPHERAL = 1;
     
     NSLog(@"Discovered %@ at %@", peripheral.name, RSSI);
     
-    // Ok, it's in range - have we already seen it?
     if (self.discoveredPeripheral != peripheral) {
         
         // Save a local copy of the peripheral, so CoreBluetooth doesn't get rid of it
+        // And this action will prevent the central to connnect the peripheral twice.
         self.discoveredPeripheral = peripheral;
         
         // And connect
@@ -167,9 +146,6 @@ static int PERIPHERAL = 1;
     [self.centralManager stopScan];
     NSLog(@"Scanning stopped");
     
-    // Clear the data that we may already have
-    [self.data setLength:0];
-    
     // Make sure we get the discovery callbacks
     peripheral.delegate = self;
     
@@ -180,12 +156,13 @@ static int PERIPHERAL = 1;
 - (void)centralManager:(CBCentralManager *)central didDisconnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error {
     NSLog(@"Disconnect to %@.", peripheral);
     self.discoveredPeripheral = nil;
+    self.serviceUUID = nil;
     [self runCallback:CENTRAL andEvent:EV_DISCONNECT_PERIPHERAL];
 }
 
 #pragma mark - Peripheral Methods
 
-/** The Transfer Service was discovered
+/** Service was discovered
  */
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverServices:(NSError *)error
 {
@@ -199,6 +176,7 @@ static int PERIPHERAL = 1;
     NSLog(@"didDiscoverServices");
     // Loop through the newly filled peripheral.services array, just in case there's more than one.
     for (CBService *service in peripheral.services) {
+        // Check the uuid of the service. Will discover the characteristics if matched our uuid.
         if ([self runCallback:PERIPHERAL andEvent:EV_DISCOVER_SERVICE withMessage:service.UUID.UUIDString]) {
             [peripheral discoverCharacteristics:nil forService:service];
         }
@@ -206,8 +184,7 @@ static int PERIPHERAL = 1;
 }
 
 
-/** The Transfer characteristic was discovered.
- *  Once this has been found, we want to subscribe to it, which lets the peripheral know we want the data it contains
+/** characteristic was discovered.
  */
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(NSError *)error
 {
@@ -221,12 +198,7 @@ static int PERIPHERAL = 1;
     
     // Again, we loop through the array, just in case.
     for (CBCharacteristic *characteristic in service.characteristics) {
-        // And check if it's the right one
-//        if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:TRANSFER_CHARACTERISTIC_UUID]]) {
-//            
-//            // If it is, subscribe to it
-//            [peripheral setNotifyValue:YES forCharacteristic:characteristic];
-//        }
+        // If it is the characteristic we want, subscribe to it
         if ([self runCallback:PERIPHERAL andEvent:EV_DISCOVER_CHAR_FOR_SERVICE withMessage:characteristic.UUID.UUIDString]) {
             [peripheral setNotifyValue:YES forCharacteristic:characteristic];
         }
@@ -261,11 +233,6 @@ static int PERIPHERAL = 1;
     if (error) {
         NSLog(@"Error changing notification state: %@", error.localizedDescription);
     }
-    
-    // Exit if it's not the transfer characteristic
-//    if (![characteristic.UUID isEqual:[CBUUID UUIDWithString:TRANSFER_CHARACTERISTIC_UUID]]) {
-//        return;
-//    }
     
     // Notification has started
     if (characteristic.isNotifying) {
