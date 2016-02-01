@@ -1,5 +1,5 @@
 # BLECommunication
-Android communicate with iOS using BLE (Bluetooth Low Energy)
+BLE (Bluetooth Low Energy) Central Lib for both Android and iOS. You can use this lib to connect to the BLE Peripheral(in our Example, it's OSX)
 
 BLE has two modes
 __Central__ and __Peripheral__
